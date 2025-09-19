@@ -1,0 +1,39 @@
+# =
+# Arquivo de Configuração Principal para o Coletor de API
+# =
+
+[general]
+# Modo de operação do script.
+# Altere para 'sap' para ativar a coleta da API da SAP.
+# Altere para 'openweathermap' para ativar a coleta da API de clima.
+mode =
+
+# Intervalo entre as coletas em segundos.
+collection_interval_seconds =
+
+[logging]
+# Caminho completo para o arquivo de log.
+log_file_path =
+
+# Rotação de logs: 'D' para dias, 'H' para horas, 'M' para minutos.
+log_rotation_interval =
+
+# Quantidade de arquivos de log a serem mantidos (7 dias neste caso).
+log_backup_count =
+
+[openweathermap]
+# Cadastre-se em https://openweathermap.org/ e gere sua API key.
+api_key =
+city =
+
+[sap]
+# Credenciais para o fluxo OAuth2 da SAP Cloud ALM
+client_id =
+client_secret =
+token_url =
+base_api_url =
+
+[datadog]
+# Credenciais do Datadog (usadas apenas no modo 'sap')
+api_key =
+log_url =
