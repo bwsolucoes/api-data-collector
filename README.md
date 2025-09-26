@@ -4,88 +4,114 @@
 
 Um script Python modular e robusto para coletar dados de APIs (SAP Cloud ALM, OpenWeatherMap) e salvá-los em arquivos de log estruturados (JSON Lines) para posterior processamento por agentes de monitoramento como o Datadog.
 
-## Funcionalidades
+# Guia de Integração: Coletor de Logs SAP para Kubernetes
 
-- **Coleta Modular**: Facilmente configurável para coletar dados da API do SAP Cloud ALM ou da OpenWeatherMap (para testes).
-- **Configuração Centralizada**: Todas as configurações, incluindo credenciais e modo de operação, são gerenciadas no arquivo `config.ini`.
-- **Saída Estruturada**: Os logs são gerados no formato JSON Lines, ideal para parsing automático por coletores de log.
-- **Rotação Automática de Logs**: Utiliza o `TimedRotatingFileHandler` do Python para gerenciar o tamanho e a retenção dos arquivos de log, evitando o esgotamento de disco.
-- **Gerenciamento como Serviço**: Inclui um arquivo de unidade `systemd` (`api-collector.service`) para garantir que o script seja executado de forma confiável em segundo plano, inicie com o sistema e reinicie automaticamente em caso de falhas.
+## 1. Visão Geral
 
-## Estrutura do Projeto
+Este pacote contém os artefatos necessários para construir e implantar o serviço de coleta de logs da API SAP Cloud ALM em um ambiente Kubernetes (AWS EKS).
 
+O serviço opera como um `Deployment` que coleta dados da API SAP e os envia diretamente para o endpoint de ingestão de logs do Datadog. A configuração é gerenciada através de um `Secret` do Kubernetes, desacoplado da imagem do contêiner.
+
+## 2. Componentes do Pacote
+
+* `main.py`: O código-fonte da aplicação em Python.
+* `requirements.txt`: As dependências Python necessárias.
+* `Dockerfile`: O manifesto para a construção da imagem do contêiner.
+* `config.ini.example`: Um template para o arquivo de configuração.
+* `k8s/deployment.yaml`: O manifesto de implantação para o Kubernetes.
+
+## 3. Pré-requisitos
+
+* Um cluster AWS EKS funcional e acessível.
+* Um registro de contêiner interno (ex: AWS ECR) para hospedar a imagem da aplicação.
+* Um ambiente de pipeline (CI/CD) com acesso ao cluster e capacidade de executar comandos `docker` e `kubectl`.
+* Credenciais da API da SAP e da API do Datadog.
+
+## 4. Fluxo de Integração e Implantação
+
+O processo a seguir deve ser adaptado e integrado à sua pipeline de CI/CD.
+
+### Passo 4.1: Configuração
+
+Crie um arquivo `config.ini` a partir do template `config.ini.example`. Preencha este arquivo com as credenciais e parâmetros específicos do seu ambiente (SAP e Datadog). Este arquivo será usado para criar o `Secret` no Kubernetes e **não deve ser adicionado à imagem do contêiner**.
+
+### Passo 4.2: Construção e Publicação da Imagem do Contêiner
+
+A pipeline deve executar o build da imagem Docker a partir do `Dockerfile` contido neste pacote e publicá-la em seu registro de contêiner interno.
+
+```bash
+# Exemplo de comandos para a pipeline
+
+# 1. Construir a imagem
+docker build -t SEU_REGISTRY/api-collector:v1.0 .
+
+# 2. Publicar a imagem
+docker push SEU_REGISTRY/api-collector:v1.0
 ```
-/opt/api-collector/
-├── venv/                   # Ambiente virtual Python
-├── main.py                 # O script principal da aplicação
-├── config.ini              # Arquivo de configuração (NÃO DEVE SER VERSIONADO COM SEGREDOS)
-├── config.ini.example      # Um template do arquivo de configuração
-├── requirements.txt        # Dependências Python do projeto
-└── .gitignore              # Arquivos e pastas a serem ignorados pelo Git
+*Substitua `SEU_REGISTRY` pela URL do seu repositório de contêineres (ex: `123456789012.dkr.ecr.us-east-1.amazonaws.com`).*
+
+### Passo 4.3: Atualização do Manifesto de Implantação
+
+Edite o arquivo `k8s/deployment.yaml`. É **mandatório** que a linha `image:` seja atualizada para apontar para a imagem que você publicou no passo anterior.
+
+```yaml
+# k8s/deployment.yaml
+...
+spec:
+  containers:
+  - name: api-collector-container
+    # ATUALIZE ESTA LINHA
+    image: SEU_REGISTRY/api-collector:v1.0
+...
 ```
 
-## Pré-requisitos
+### Passo 4.4: Implantação no EKS
 
-- Um sistema operacional Linux compatível com `systemd` (Ubuntu, Debian, CentOS, Oracle Linux, etc.).
-- Python 3.8 ou superior.
-- Acesso à internet para baixar dependências e conectar-se às APIs.
+A pipeline deve executar os seguintes comandos `kubectl`, autenticada no cluster de destino.
 
-## Instalação
-
-1.  **Clone o repositório:**
+1.  **Criação do `Secret`:**
+    *Este comando utiliza o arquivo `config.ini` preenchido para criar um `Secret` no cluster.*
     ```bash
-    git clone [https://github.com/seu-usuario/api-data-collector.git](https://github.com/seu-usuario/api-data-collector.git)
-    cd api-data-collector
+    kubectl create secret generic api-config --from-file=config.ini
     ```
 
-2.  **Crie um ambiente virtual e instale as dependências:**
+2.  **Implantação da Aplicação:**
+    *Este comando aplica o manifesto e cria os recursos no cluster.*
     ```bash
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install -r requirements.txt
+    kubectl apply -f k8s/deployment.yaml
     ```
 
-3.  **Configure a aplicação:**
-    - Copie o arquivo de exemplo de configuração:
-      ```bash
-      cp config.ini.example config.ini
-      ```
-    - Edite o `config.ini` e preencha os valores necessários, como as chaves de API e o modo de operação desejado.
+## 5. Validação
 
-## Executando como um Serviço (systemd)
-
-1.  **Crie o diretório de log:**
+1.  **Verifique o status do Pod:**
     ```bash
-    sudo mkdir -p /var/log/api-collector
+    kubectl get pods -l app=api-collector
+    ```
+    Aguarde o status `Running`.
+
+2.  **Monitore os logs da aplicação:**
+    ```bash
+    POD_NAME=$(kubectl get pods -l app=api-collector -o jsonpath='{.items[0].metadata.name}')
+    kubectl logs -f $POD_NAME
     ```
 
-2.  **Copie o arquivo de serviço para o diretório do systemd:**
-    *Um arquivo `api-collector.service` de exemplo está disponível na documentação do projeto.*
+3.  **Confirme no Datadog:** Verifique se os logs com `source: sap_cloud_alm` estão sendo recebidos.
+
+## 6. Gerenciamento do Ciclo de Vida
+
+### Atualizar a Configuração
+
+Para alterar qualquer parâmetro no `config.ini`:
+1.  Execute novamente o Passo 4.4.1 (delete e recrie o `Secret` a partir do arquivo atualizado).
+2.  Force a reinicialização do `Deployment` para carregar a nova configuração:
     ```bash
-    sudo nano /etc/systemd/system/api-collector.service
-    ```
-    - Cole o conteúdo do arquivo de serviço e salve.
-
-3.  **Recarregue o daemon do systemd, habilite e inicie o serviço:**
-    ```bash
-    sudo systemctl daemon-reload
-    sudo systemctl enable api-collector.service
-    sudo systemctl start api-collector.service
+    kubectl rollout restart deployment api-collector-deployment
     ```
 
-## Verificação e Uso
+### Desinstalação
 
-- **Verificar o status do serviço:**
-  ```bash
-  sudo systemctl status api-collector.service
-  ```
-
-- **Visualizar os logs da aplicação em tempo real:**
-  ```bash
-  sudo tail -f /var/log/api-collector/api_data.log
-  ```
-
-- **Visualizar os logs do serviço (saídas de print e erros):**
-  ```bash
-  sudo journalctl -u api-collector.service -f
-  ```
+Para remover a aplicação do cluster, execute:
+```bash
+kubectl delete -f k8s/deployment.yaml
+kubectl delete secret api-config
+```
