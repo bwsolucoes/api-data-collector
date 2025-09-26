@@ -1,0 +1,18 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: api-collector-cluster
+  region: us-east-1
+  version: "1.32"
+
+managedNodeGroups:
+  - name: standard-workers
+    instanceType: t3.small
+    desiredCapacity: 1
+    # Adicionando a seção de tags obrigatórias aqui:
+    tags:
+      Environment: Dev
+      Application: api-collector-sap
+      Project: POC
+      POC: Klabin

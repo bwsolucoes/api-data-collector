@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Nome do nosso Deployment
+  name: api-collector-deployment
+spec:
+  # Quantas cópias (pods) da nossa aplicação queremos rodando
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-collector
+  template:
+    metadata:
+      labels:
+        # Etiqueta para identificar os pods criados por este deployment
+        app: api-collector
+    spec:
+      containers:
+      - name: api-collector-container
+        # IMPORTANTE: Altere "seu-usuario-dockerhub" para o seu usuário do Docker Hub!
+        image: galenobw/api-collector:v1.0
+        # Monta o volume que contém nosso arquivo de configuração
+        volumeMounts:
+        - name: config-volume
+          # Caminho onde o config.ini estará disponível dentro do contêiner
+          mountPath: /app/config.ini
+          # O nome do arquivo dentro do volume
+          subPath: config.ini
+      # Define o volume que será usado pelos contêineres
+      volumes:
+      - name: config-volume
+        # O volume é preenchido com os dados do Segredo (Secret) que vamos criar
+        secret:
+          secretName: api-config
