@@ -18,7 +18,7 @@ spec:
       containers:
       - name: api-collector-container
         # IMPORTANTE: Altere "seu-usuario-dockerhub" para o seu usuário do Docker Hub!
-        image: galenobw/api-collector:v1.0
+        image: seu-usuario-dockerhub/api-collector:v1.0
         # Monta o volume que contém nosso arquivo de configuração
         volumeMounts:
         - name: config-volume
